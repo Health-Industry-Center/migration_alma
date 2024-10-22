@@ -1,0 +1,5 @@
+---
+- block:
+
+  - import_tasks: migration.yml
+    tags: migration

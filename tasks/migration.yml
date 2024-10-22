@@ -1,0 +1,73 @@
+---
+- block:
+
+  - include_tasks:
+      file: fix_repo.yml
+
+  - name: update package
+    raw: yum update -y
+
+  - include_tasks:
+      file: fix_repo.yml
+
+  - name: install python
+    raw: yum install -y python39
+
+  - name: check version os
+    shell: |
+        if cat /etc/redhat-release | grep -q 'CentOS Linux release 8'; then 
+          echo true; 
+        else 
+        echo false;
+        fi;
+    args:
+      executable: /bin/bash
+    register: check
+    tags: prepare_migration
+    no_log: true
+
+  - name: Wrong version os
+    fail:
+      msg: You have wrong version OS for this playbook! This playbook working only CentOS 8.
+    when: check.stdout_lines is contains('false') 
+
+  - name: Create Folder script if not exist
+    file:
+      path: "/home/{{ deploy_user }}/script"
+      mode: 0755
+      state: directory
+    when: check.stdout_lines is contains('true') 
+
+  - name: copy script migration
+    copy:
+      src: ./files/almalinux.sh
+      dest: "/home/{{ deploy_user }}/script"
+      owner: "{{ deploy_user }}"
+      group: "{{ deploy_user }}"
+      mode: 0744
+    when: check.stdout_lines is contains('true') 
+
+  - name: start script migration
+    shell:  /home/{{ deploy_user }}/script/almalinux.sh > migration.log
+    args:
+      chdir: "/home/{{ deploy_user }}/script/"
+    async: 560
+    poll: 60
+    when: check.stdout_lines is contains('true')
+
+  - name: remove migration script
+    file: 
+      path: "/home/{{ deploy_user }}/script/almalinux.sh"
+      state: absent
+    when: check.stdout_lines is contains('true')
+
+  - name: check new version os
+    shell: cat /etc/redhat-release
+    register: os
+
+  - name: result
+    debug:
+      msg: Migration success complite! current OS {{ os.stdout }}
+    when: os.stdout is contains('AlmaLinux')
+
+  tags: migration
